@@ -118,15 +118,15 @@ class QueryTag(State):
     ==============
         "TIME_OUT" : Request timed out, calls BackToIdle with the corresponding message
         "CONN_ERR" : Connection error: server unreachable or error occurred during processing
+        "INVALID" : The tag is invalid or not found in the database
 
         Otherwise checks status code and responds appropriately
-    
-    Status codes
+
+    Continues to
     ==============
-        200 : A project was assigned, calls EndWork to end it
-        202 : No project is assigned, calls QueryProjects to get a list of assignable projects
-        404 : Invalid or unrecognised tag
-        500 : Internal server error
+        BackToIdle in case of error. <param passed : message>
+        QueryProjects when 'data' field of json response is empty (tag doesn't have a running project currently) <param passed : tag id>
+        EndWork if tag has a running project. <param passed : tag id, project id>
 
     """
 
@@ -199,12 +199,11 @@ class QueryProjects(State):
 
         Otherwise checks status code and responds appropriately    
     
-    Status codes
+    Continues to
     ==============
-        200 : OK, calls AcceptProject if there is only one record in the list, or passes the whole list to SelectProject
-        202 : No assignable projects
-        404 : Invalid or unrecognised tag - should not be able to reach this point after getting through QueryTag
-        500 : Internal server error
+        BackToIdle in case an error occurs. <params passed : message>
+        AcceptProject in case there is only one available project. <params passed : project data, tag id, username>
+        SelectProject otherwise. <params passed : list of projects, tag id, username>
 
     """
 
@@ -264,7 +263,10 @@ class AcceptProject(State):
         "WAIT" : No input from user, returns self
         "CANCEL" : User canceled the action, goes to BackToIdle with a confiramtion of the cancellation
 
-        Otherwise the user chose to start the project, returns Assign
+    Continues to
+    ==============
+        BackToIdle in case an error occurs. <params passed : message>
+        Assign otherwise. <params passed : project data>
     
     """
 
@@ -334,9 +336,11 @@ class SelectProject(State):
         "TIME_OUT" : User has been idle for too long, return to Idle state. Pressing a button resets the timer
         "WAIT" : No input from user, returns self
 
-        Otherwise : - if the user chose to start a project, returns Assign
-                    - if the user chose to cancel, returns BackToIdle with a confirmation of the cancellation
-    
+    Continues to
+    ==============
+        BackToIdle in case an error occurs or the idle time limit is exceeded. <params passed : message>
+        Assign in case the user selected a project. <params passed : selected project data, tag id>
+
     """
 
 
@@ -435,11 +439,9 @@ class Assign(State):
         "TIME_OUT" : Request timed out, returns BackToIdle with an error message
         "CONN_ERR" : Connection error: server unreachable or error occurred during processing
 
-    Status codes
+    Continues to
     ==============
-        200 : OK
-        404 : Invalid or unrecognised tag - should not be able to reach this point after getting through QueryTag
-        500 : Internal server error
+        BackToIdle with either an error message or a confirmation. <params passed : message>
 
     """
     
@@ -505,7 +507,10 @@ class EndWork(State):
         "WAIT" : User is idle, return self
         "CANCEL" : User canceled the action, return BackToIdle with a confirmation of the cancellation
 
-        Otherwise the user chose to stop the project, return Unassign
+    Continues to
+    ==============
+        BackToIdle in case of timeout or cancellation. <params passed : message>
+        Unassign if user chose to stop working on project. <params passed : tag id>
 
     """
 
@@ -574,11 +579,9 @@ class Unassign(State):
 
         Otherwise if the response status is ok, return BackToIdle with a confirmation message
 
-    Status codes
+    Continues to
     ==============
-        200 : OK
-        404 : Invalid or unrecognised tag - should not be able to reach this point after getting through QueryTag
-        500 : Internal server error
+        BackToIdle in case of error or timeout, or to confirm. <params passed : message>
 
     """
 
