@@ -1,0 +1,195 @@
+{
+	"info": {
+		"_postman_id": "c9381e04-973b-4612-bbef-2a0602449ffa",
+		"name": "TimeTrackingApi",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Lista de comenzi alocate",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{apiRootUrl}}/tags/{{tagID}}/alloc_orders",
+					"host": [
+						"{{apiRootUrl}}"
+					],
+					"path": [
+						"tags",
+						"{{tagID}}",
+						"alloc_orders"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Lista de comenzi alocate Copy",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{apiRootUrl}}/tags/{{tagID}}/alloc_orders",
+					"host": [
+						"{{apiRootUrl}}"
+					],
+					"path": [
+						"tags",
+						"{{tagID}}",
+						"alloc_orders"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Obtine starea tag-ului",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{apiRootUrl}}/tags/{{tagID}}/started_work",
+					"host": [
+						"{{apiRootUrl}}"
+					],
+					"path": [
+						"tags",
+						"{{tagID}}",
+						"started_work"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Tag existent",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{apiRootUrl}}/tags/{{tagID}}",
+					"host": [
+						"{{apiRootUrl}}"
+					],
+					"path": [
+						"tags",
+						"{{tagID}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Listare timetracking",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{apiRootUrl}}/timetracking/",
+					"host": [
+						"{{apiRootUrl}}"
+					],
+					"path": [
+						"timetracking",
+						""
+					],
+					"query": [
+						{
+							"key": "filter",
+							"value": "status=w",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Start tracking",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/vnd.api+json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\"data\": {\"type\": \"timetracking\", \"attributes\": {\"hourly_rate\": \"10\", \"employee\": 6, \"operation\": 2, \"order\": 124, \"currency\": \"EUR\"}}}\n\n"
+				},
+				"url": {
+					"raw": "{{apiRootUrl}}/timetracking/",
+					"host": [
+						"{{apiRootUrl}}"
+					],
+					"path": [
+						"timetracking",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Stop tracking",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Content-Type",
+						"type": "text",
+						"value": "application/vnd.api+json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"data\": {\n        \"id\": 10,\n        \"type\": \"timetracking\",\n        \"attributes\": {\n            \"status\": \"f\"\n        }\n    }\n}"
+				},
+				"url": {
+					"raw": "{{apiRootUrl}}/timetracking/10",
+					"host": [
+						"{{apiRootUrl}}"
+					],
+					"path": [
+						"timetracking",
+						"10"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "apiRootUrl",
+			"value": "http://172.16.20.15/dbapi/v2/spaleck"
+		},
+		{
+			"key": "tagID",
+			"value": ""
+		}
+	]
+}
