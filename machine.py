@@ -13,6 +13,7 @@ from Spalek.__global_var import lcd, left_button, right_button, middle_button
 
 from datetime import datetime
 import requests
+import json
 import logging
 
 
@@ -44,7 +45,7 @@ class Idle(State):
 
         lcd.clear()
 
-        self.__reader = RDM6300('/dev/ttyS1', 9600)
+        self.__reader = RDM6300('/dev/ttyS3', 9600)
         self.__reader.readTag()
 
         self.__dots = 0
@@ -146,7 +147,7 @@ class QueryTag(State):
         """
 
         try:
-            resp = requests.get(f"{serverIP}/tags/{self.__tagID}", timeout=config.timeout)
+            resp = requests.get(f"{config.serverIP}/tags/{self.__tagID}", timeout=config.timeout)
 
             if not resp:
                 return 500
@@ -155,7 +156,7 @@ class QueryTag(State):
                 return "INVALID"
             
             # Tag is valid
-            resp = requests.get(f"{serverIP}/tags/{self.__tagID}/started_work", timeout=config.timeout)
+            resp = requests.get(f"{config.serverIP}/tags/{self.__tagID}/started_work", timeout=config.timeout)
 
             if not resp:
                 return 500
@@ -215,7 +216,7 @@ class QueryProjects(State):
 
     def run(self):
         try:
-            resp = requests.get(f"{serverIP}/tags/{self.__tagID}/alloc_orders")
+            resp = requests.get(f"{config.serverIP}/tags/{self.__tagID}/alloc_orders")
 
             if not resp:
                 return 500
@@ -356,7 +357,7 @@ class SelectProject(State):
         self.__tagID = tagID
         self.__tagUser = tagUser
 
-        self.__projects_list.append({"attributes": {"id": -1, "order_name": config.locale["BACK"]}})
+        self.__projects_list.append({"id": -1, "attributes": {"order_name": config.locale["BACK"], "op_name" : ""}})
         self.__projects_list.extend(self.__projects_list)
 
         self.__last_states = [0, 0, 0]  # Initial button states (not pressed) : left, middle, right
@@ -419,10 +420,10 @@ class SelectProject(State):
         if e == "WAIT":
             return self
         
-        if e['attributes']['id'] == -1:
+        if e['id'] == -1:
             return BackToIdle(config.locale["CANCELED"])
         
-        return Assign(e, self.__tagID)
+        return Assign(e['attributes'], self.__tagID)
     
 
     def get_display_text(self, project):
@@ -447,7 +448,7 @@ class Assign(State):
     
     
     def __init__(self, project, tagID):
-        self.__project = project['attributes']
+        self.__project = project # ['attributes']
 
         self.__tagID = tagID
 
@@ -521,13 +522,15 @@ class EndWork(State):
 
         """
 
+        self.__project = project
+
         project = project["attributes"]
-        proj_text = f"{project['order_name']} {project['op_name']}"[0:17]
+        proj_text = f"{project['order_label']} {project['operation_name']}"[0:20]
 
         lcd.clear()
         lcd.Print([
             config.locale["STOP"],
-            f"{proj_text}{project['time']: >{17 - len(project['text'])}}min",
+            f"{proj_text}{project['worktime']: >{17 - len(proj_text)}}min",
             "",
             f"OK{config.locale['BACK']: >18}"
         ])
@@ -544,7 +547,7 @@ class EndWork(State):
         right_pressed = not read(right_button)
 
         if left_pressed and left_pressed != self.__last_states[0]:
-            return "OK"
+            return self.__project
 
         if right_pressed and right_pressed != self.__last_states[2]:
             return "CANCEL"
@@ -565,7 +568,7 @@ class EndWork(State):
         if e == "CANCEL":
             return BackToIdle(config.locale["CANCELED"])
         
-        return Unassign(self.__tagID)
+        return Unassign(e)
 
 
 class Unassign(State):
@@ -585,18 +588,29 @@ class Unassign(State):
 
     """
 
-    def __init__(self, tagID):
+    def __init__(self, project):
         lcd.clear()
         lcd.PrintLine(f"{config.locale['PROC']:^20}", 2)
 
-        self.__tagID = tagID
+        self.__project = project
+        self.__req_data = {
+            "data": {
+                "id": str(self.__project['id']),
+                "type": "timetracking",
+                "attributes": {
+                    "status": "f"
+                }
+            }
+        }
 
         super().__init__()
 
 
     def run(self):
         try:
-            return requests.post(f"http://{config.serverIP}:{config.serverPort}/{self.__tagID}", timeout=config.timeout)
+            req_headers = {"Content-Type": "application/vnd.api+json"}
+
+            return requests.patch(f"{config.serverIP}/timetracking/{self.__project['id']}", headers=req_headers, data=json.dumps(self.__req_data), timeout=config.timeout)
         except requests.exceptions.ConnectTimeout:
             return "TIME_OUT"
         except requests.ConnectionError:
@@ -604,6 +618,9 @@ class Unassign(State):
 
 
     def on_event(self, e):
+
+        print(e.text)
+
         if e == "TIME_OUT":
             return BackToIdle(config.locale["REQ_TO"])
         
@@ -666,6 +683,6 @@ class BackToIdle(State):
 
 # Create and configure the logger
 
-logging.basicConfig(filename="/root/Python/Spalek/log.txt")
+logging.basicConfig(filename="/root/Spaleck/timetrackingbox/log.txt")
 logging.info("Program started")
 
