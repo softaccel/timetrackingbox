@@ -373,11 +373,11 @@ class SelectProject(State):
 
         # Print two of the projects from the list
 
-        topProject = f"&0& {get_display_text(self.__projects_list[self.__selected]['attributes'])} &1&"
+        topProject = f"&0& {self.get_display_text(self.__projects_list[self.__selected]['attributes'])} &1&"
 
         listToPrint = ["", f"{topProject:20}"]
         listToPrint.extend(
-            [f"  {get_display_text(p['attributes']): <18}" for p in self.__projects_list[(self.__selected + 1):(self.__selected + 2)]]
+            [f"  {self.get_display_text(p['attributes']): <18}" for p in self.__projects_list[(self.__selected + 1):(self.__selected + 2)]]
         )
 
         lcd.Print(listToPrint)
@@ -425,7 +425,7 @@ class SelectProject(State):
         return Assign(e, self.__tagID)
     
 
-    def get_display_text(project):
+    def get_display_text(self, project):
         return f"{project['order_name']} {project['op_name']}"[0:17]
 
 
