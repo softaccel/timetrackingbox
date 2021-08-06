@@ -12,9 +12,7 @@ from Spalek.common import config
 from Spalek.__global_var import lcd, left_button, right_button, middle_button
 
 from datetime import datetime
-import requests
-import json
-import logging
+import requests, logging, json
 
 
 class Idle(State):
@@ -45,7 +43,7 @@ class Idle(State):
 
         lcd.clear()
 
-        self.__reader = RDM6300('/dev/ttyS3', 9600)
+        self.__reader = RDM6300('/dev/ttyS1', 9600)
         self.__reader.readTag()
 
         self.__dots = 0
@@ -70,7 +68,7 @@ class Idle(State):
             logging.warning("TAG_READER: " + str(e))
             self.__reader.readTag()
 
-        footer = "Spalek"
+        footer = "Spaleck"
 
         lcd.Print([
             datetime.now().strftime("%a, %d.%m  %H:%M:%S"),
@@ -119,15 +117,15 @@ class QueryTag(State):
     ==============
         "TIME_OUT" : Request timed out, calls BackToIdle with the corresponding message
         "CONN_ERR" : Connection error: server unreachable or error occurred during processing
-        "INVALID" : The tag is invalid or not found in the database
 
         Otherwise checks status code and responds appropriately
-
-    Continues to
+    
+    Status codes
     ==============
-        BackToIdle in case of error. <param passed : message>
-        QueryProjects when 'data' field of json response is empty (tag doesn't have a running project currently) <param passed : tag id>
-        EndWork if tag has a running project. <param passed : tag id, project id>
+        200 : A project was assigned, calls EndWork to end it
+        202 : No project is assigned, calls QueryProjects to get a list of assignable projects
+        404 : Invalid or unrecognised tag
+        500 : Internal server error
 
     """
 
@@ -149,16 +147,22 @@ class QueryTag(State):
         try:
             resp = requests.get(f"{config.serverIP}/tags/{self.__tagID}", timeout=config.timeout)
 
-            if not resp:
+            if resp.status_code == 500:
                 return 500
 
             if resp.json()["data"] is None:
                 return "INVALID"
             
             # Tag is valid
+
+            fname = resp.json()["data"]["attributes"]["fname"]
+            lname = resp.json()["data"]["attributes"]["lname"]
+
+            self.__display_name = f"{fname[0]}. {lname}"[0: 19]
+
             resp = requests.get(f"{config.serverIP}/tags/{self.__tagID}/started_work", timeout=config.timeout)
 
-            if not resp:
+            if resp.status_code == 500:
                 return 500
             
             return resp.json()["data"]
@@ -186,7 +190,7 @@ class QueryTag(State):
         if not e:
             return QueryProjects(self.__tagID)
         
-        return EndWork(self.__tagID, e[0])
+        return EndWork(self.__tagID, e[0], self.__display_name)
 
 
 class QueryProjects(State):
@@ -200,11 +204,12 @@ class QueryProjects(State):
 
         Otherwise checks status code and responds appropriately    
     
-    Continues to
+    Status codes
     ==============
-        BackToIdle in case an error occurs. <params passed : message>
-        AcceptProject in case there is only one available project. <params passed : project data, tag id, username>
-        SelectProject otherwise. <params passed : list of projects, tag id, username>
+        200 : OK, calls AcceptProject if there is only one record in the list, or passes the whole list to SelectProject
+        202 : No assignable projects
+        404 : Invalid or unrecognised tag - should not be able to reach this point after getting through QueryTag
+        500 : Internal server error
 
     """
 
@@ -218,7 +223,7 @@ class QueryProjects(State):
         try:
             resp = requests.get(f"{config.serverIP}/tags/{self.__tagID}/alloc_orders")
 
-            if not resp:
+            if resp.status_code == 500:
                 return 500
             
             return resp.json()["data"]
@@ -264,10 +269,7 @@ class AcceptProject(State):
         "WAIT" : No input from user, returns self
         "CANCEL" : User canceled the action, goes to BackToIdle with a confiramtion of the cancellation
 
-    Continues to
-    ==============
-        BackToIdle in case an error occurs. <params passed : message>
-        Assign otherwise. <params passed : project data>
+        Otherwise the user chose to start the project, returns Assign
     
     """
 
@@ -281,7 +283,7 @@ class AcceptProject(State):
         lcd.clear()
 
         project = project["attributes"]
-        proj_text = f"{project['order_name']} {project['op_name']}"[0:17]
+        proj_text = f"{project['order_name']} {project['op_name']}"[0: 16]
 
         lcd.Print([
             f"{tagUser: >20}",
@@ -337,11 +339,9 @@ class SelectProject(State):
         "TIME_OUT" : User has been idle for too long, return to Idle state. Pressing a button resets the timer
         "WAIT" : No input from user, returns self
 
-    Continues to
-    ==============
-        BackToIdle in case an error occurs or the idle time limit is exceeded. <params passed : message>
-        Assign in case the user selected a project. <params passed : selected project data, tag id>
-
+        Otherwise : - if the user chose to start a project, returns Assign
+                    - if the user chose to cancel, returns BackToIdle with a confirmation of the cancellation
+    
     """
 
 
@@ -357,7 +357,7 @@ class SelectProject(State):
         self.__tagID = tagID
         self.__tagUser = tagUser
 
-        self.__projects_list.append({"id": -1, "attributes": {"order_name": config.locale["BACK"], "op_name" : ""}})
+        self.__projects_list.append({"id": -1, "attributes": {"order_name": config.locale["BACK"], "op_name": ""}})
         self.__projects_list.extend(self.__projects_list)
 
         self.__last_states = [0, 0, 0]  # Initial button states (not pressed) : left, middle, right
@@ -374,12 +374,13 @@ class SelectProject(State):
 
         # Print two of the projects from the list
 
-        topProject = f"&0& {self.get_display_text(self.__projects_list[self.__selected]['attributes'])} &1&"
+        topProject = f"&0& { self.get_display_text( self.__projects_list[self.__selected]['attributes'] ) } &1&"
 
-        listToPrint = ["", f"{topProject:20}"]
-        listToPrint.extend(
-            [f"  {self.get_display_text(p['attributes']): <18}" for p in self.__projects_list[(self.__selected + 1):(self.__selected + 2)]]
-        )
+        listToPrint = [
+            "",
+            f"{topProject:24}",
+            f"  {self.get_display_text(self.__projects_list[(self.__selected + 1)]['attributes']): <18}"
+        ]
 
         lcd.Print(listToPrint)
 
@@ -423,11 +424,17 @@ class SelectProject(State):
         if e['id'] == -1:
             return BackToIdle(config.locale["CANCELED"])
         
-        return Assign(e['attributes'], self.__tagID)
+        return Assign(e, self.__tagID)
     
 
     def get_display_text(self, project):
-        return f"{project['order_name']} {project['op_name']}"[0:17]
+        
+        text = project['order_name']
+
+        if project['op_name']:
+            text += " " + project['op_name']
+
+        return text[0: 16]
 
 
 class Assign(State):
@@ -440,15 +447,17 @@ class Assign(State):
         "TIME_OUT" : Request timed out, returns BackToIdle with an error message
         "CONN_ERR" : Connection error: server unreachable or error occurred during processing
 
-    Continues to
+    Status codes
     ==============
-        BackToIdle with either an error message or a confirmation. <params passed : message>
+        200 : OK
+        404 : Invalid or unrecognised tag - should not be able to reach this point after getting through QueryTag
+        500 : Internal server error
 
     """
     
     
     def __init__(self, project, tagID):
-        self.__project = project # ['attributes']
+        self.__project = project['attributes']
 
         self.__tagID = tagID
 
@@ -473,7 +482,7 @@ class Assign(State):
 
             resp = requests.post(f"{config.serverIP}/timetracking", headers=req_headers, data=json.dumps(req_data), timeout=config.timeout)
 
-            if not resp:
+            if resp.status_code == 500:
                 return 500
 
             return resp.json()['data']
@@ -508,36 +517,31 @@ class EndWork(State):
         "WAIT" : User is idle, return self
         "CANCEL" : User canceled the action, return BackToIdle with a confirmation of the cancellation
 
-    Continues to
-    ==============
-        BackToIdle in case of timeout or cancellation. <params passed : message>
-        Unassign if user chose to stop working on project. <params passed : tag id>
+        Otherwise the user chose to stop the project, return Unassign
 
     """
 
 
-    def __init__(self, tagID, project):
+    def __init__(self, tagID, project, tagUser):
         """
-        Clears the display and prints querys the user for confirmation
+        Clears the display and querys the user for confirmation
 
         """
 
-        self.__project = project
-
-        project = project["attributes"]
-        proj_text = f"{project['order_label']} {project['operation_name']}"[0:20]
+        proj_text = f"{project['attributes']['order_label']} {project['attributes']['operation_name']}"[0:17]
 
         lcd.clear()
         lcd.Print([
-            config.locale["STOP"],
-            f"{proj_text}{project['worktime']: >{17 - len(proj_text)}}min",
-            "",
-            f"OK{config.locale['BACK']: >18}"
+            f"{tagUser: >20}",
+            f"&0& {proj_text} &1&",
+            f"{config.locale['WORKING_SINCE']} {project['attributes']['worktime']}",
+            f"Stop{config.locale['BACK']: >16}"
         ])
 
         self.__last_states = [0, 0, 0]  # Initial button states (not pressed) : left, middle, right
 
         self.__tagID = tagID
+        self.__jobID = project['id']
 
         super().__init__()
     
@@ -547,7 +551,7 @@ class EndWork(State):
         right_pressed = not read(right_button)
 
         if left_pressed and left_pressed != self.__last_states[0]:
-            return self.__project
+            return "OK"
 
         if right_pressed and right_pressed != self.__last_states[2]:
             return "CANCEL"
@@ -568,7 +572,7 @@ class EndWork(State):
         if e == "CANCEL":
             return BackToIdle(config.locale["CANCELED"])
         
-        return Unassign(e)
+        return Unassign(self.__tagID, self.__jobID)
 
 
 class Unassign(State):
@@ -582,57 +586,66 @@ class Unassign(State):
 
         Otherwise if the response status is ok, return BackToIdle with a confirmation message
 
-    Continues to
+    Status codes
     ==============
-        BackToIdle in case of error or timeout, or to confirm. <params passed : message>
+        200 : OK
+        404 : Invalid or unrecognised tag - should not be able to reach this point after getting through QueryTag
+        500 : Internal server error
 
     """
 
-    def __init__(self, project):
+    def __init__(self, tagID, jobID):
         lcd.clear()
         lcd.PrintLine(f"{config.locale['PROC']:^20}", 2)
 
-        self.__project = project
-        self.__req_data = {
-            "data": {
-                "id": str(self.__project['id']),
-                "type": "timetracking",
-                "attributes": {
-                    "status": "f"
-                }
-            }
-        }
+        self.__tagID = tagID
+        self.__jobID = jobID
 
         super().__init__()
 
 
     def run(self):
         try:
+            req_data = {
+                "data": {
+                    "id": self.__jobID,
+                    "type": "timetracking",
+                    "attributes": {
+                        "status": "f"
+                    }
+                }
+            }
             req_headers = {"Content-Type": "application/vnd.api+json"}
 
-            return requests.patch(f"{config.serverIP}/timetracking/{self.__project['id']}", headers=req_headers, data=json.dumps(self.__req_data), timeout=config.timeout)
+            resp = requests.patch(f"{config.serverIP}/timetracking/{self.__jobID}", headers=req_headers, data=json.dumps(req_data), timeout=config.timeout)
+
+            if resp.status_code == 500:
+                return 500
+            
+            if resp.status_code == 404:
+                return 404
+
+            return resp.json()['data']
+
         except requests.exceptions.ConnectTimeout:
             return "TIME_OUT"
+        
         except requests.ConnectionError:
             return "CONN_ERR"
 
 
     def on_event(self, e):
-
-        print(e.text)
-
         if e == "TIME_OUT":
             return BackToIdle(config.locale["REQ_TO"])
         
         if e == "CONN_ERR":
             return BackToIdle(config.locale["SRV_UNREACH"])
         
-        if not e:
-            if e.status_code == 500:
-                return BackToIdle(e.text)
-
-            if e.status_code == 404:
-                return BackToIdle(config.locale["INVALID"])
+        if e == 500:
+            return BackToIdle(config.locale["SRV_INT"])
+        
+        if e == 404:
+            return BackToIdle(config.locale["INVALID_PROJ"])
             
         return BackToIdle(config.locale["PROJ_UA"])
 
@@ -683,6 +696,6 @@ class BackToIdle(State):
 
 # Create and configure the logger
 
-logging.basicConfig(filename="/root/Spaleck/timetrackingbox/log.txt")
+logging.basicConfig(filename="/root/Python/Spalek/log.txt")
 logging.info("Program started")
 

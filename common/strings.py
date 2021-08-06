@@ -10,7 +10,9 @@ RO_ = {
     "PROJ_UA": "Proiect terminat",
     "NO_PROJ": "Nu aveti proiecte",
     "PROJ_A": "Proiect atribuit",
-    "BACK": "Inapoi"
+    "BACK": "Inapoi",
+    "INVALID_PROJ": "Proiect invalid",
+    "WORKING_SINCE": "Timp:"
 }
 
 ENG_ = {
@@ -25,5 +27,7 @@ ENG_ = {
     "PROJ_UA": "Project unassigned",
     "NO_PROJ": "No projects",
     "PROJ_A": "Project assigned",
-    "BACK": "Back"
+    "BACK": "Back",
+    "INVALID_PROJ": "Invalid project",
+    "WORKING_SINCE": "Time:"
 }
