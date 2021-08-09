@@ -13,7 +13,7 @@ if [ $? -eq 0 ]; then
 
         rm timetrackingbox -r
     else
-        rm Spalek.bak -rm
+        rm Spalek.bak -r
         mv Spalek Spalek.bak
 
         mv timetrackingbox Spalek
