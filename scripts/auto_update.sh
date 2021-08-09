@@ -10,14 +10,14 @@ if [ $? -eq 0 ]; then
 
     if [ $? -eq 0 ]; then
         echo "No content change"
+
+        rm timetrackingbox -r
     else
-        cp Spalek Spalek.bak -r
-        rm Spalek -r
+        rm Spalek.bak -rm
+        mv Spalek Spalek.bak
 
-        cp timetrackingbox Spalek -r
+        mv timetrackingbox Spalek
     fi
-
-    rm timetrackingbox -r
 
 else
     echo "Offline"
