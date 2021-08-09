@@ -282,6 +282,8 @@ class AcceptProject(State):
 
         lcd.clear()
 
+        self.__project = project
+
         project = project["attributes"]
         proj_text = f"{project['order_name']} {project['op_name']}"[0: 16]
 
@@ -292,7 +294,6 @@ class AcceptProject(State):
             f"OK{config.locale['BACK']: >18}"
         ])
 
-        self.__project = project
         self.__tagID = tagID
         self.__last_states = [0, 0, 0] # Initial button states (not pressed) : left, middle, right
         
